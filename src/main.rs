@@ -11,21 +11,8 @@ fn main() -> Result<()> {
     markdown_to_html(readfiles)?;
     Ok(())
 }
-fn getcss() -> String {
-    let mut cssfile = File::open("./mdcss.css").expect("can not open css file");
-    let mut css_content = String::new();
-    cssfile
-        .read_to_string(&mut css_content)
-        .expect("can not read css file");
-    css_content
-}
+
 fn markdown_to_html(targets: &[String]) -> Result<()> {
-    // markdownパーサで使用するオプションを指定
-    let mut options = Options::empty();
-    options.insert(Options::ENABLE_STRIKETHROUGH);
-    options.insert(Options::ENABLE_TABLES);
-    options.insert(Options::ENABLE_SMART_PUNCTUATION);
-    let mdcss = &getcss();
     for target in targets {
         // markdownファイルを読み込み
         let targetfile = File::open(target)?;
@@ -41,11 +28,6 @@ fn markdown_to_html(targets: &[String]) -> Result<()> {
         let headtext = html! {
             header{
             meta charset="utf-8";
-            (html!{
-                style{
-                    (mdcss);
-                }
-            })
             title { "Document" };
             }
         };
@@ -71,8 +53,12 @@ struct Markdown<T: AsRef<str>>(T);
 impl<T: AsRef<str>> Render for Markdown<T> {
     fn render(&self) -> Markup {
         // Generate raw HTML
+        let mut parseoption = Options::empty();
+        parseoption.insert(Options::ENABLE_TABLES);
+        parseoption.insert(Options::ENABLE_SMART_PUNCTUATION);
+        parseoption.insert(Options::ENABLE_STRIKETHROUGH);
         let mut my_html = String::new();
-        let parser = Parser::new(self.0.as_ref());
+        let parser = Parser::new_ext(self.0.as_ref(), parseoption);
         push_html(&mut my_html, parser);
         PreEscaped(my_html)
     }
