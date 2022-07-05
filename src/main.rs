@@ -7,7 +7,7 @@ use std::io::{BufReader, Read, Write};
 
 fn main() -> Result<()> {
     let app_args: Vec<String> = env::args().collect();
-    let readfiles = &app_args[1..];
+    let readfiles = &app_args[1..]; //可変長引数
     markdown_to_html(readfiles)?;
     Ok(())
 }
@@ -22,13 +22,13 @@ fn markdown_to_html(targets: &[String]) -> Result<()> {
 
         // htmlファイルの名前を生成
         let filename: Vec<&str> = target.split(".").collect();
+        let filetitle = filename[0].clone();
         let filename = [filename[0], "html"].join(".");
-
         // ヘッダを生成
         let headtext = html! {
             header{
             meta charset="utf-8";
-            title { "Document" };
+            title {(filetitle)};
             }
         };
 
