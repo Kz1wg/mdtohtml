@@ -3,8 +3,6 @@
 ## This is test
 This tool will convert markdown to html.
 
-* table test
-
 
 1. Test Mode
 2. 花粉症撲滅
@@ -13,3 +11,5 @@ This tool will convert markdown to html.
 | ---- | ---- |
 |  TD  |  TD  |
 |  TD  |  TD  |
+
+![testpic](testpic.png)
