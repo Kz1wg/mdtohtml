@@ -1,0 +1,35 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+  
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest,windows-latest]
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Build
+      run: cargo build --verbose
+    - name: Run tests
+      run: cargo test --verbose
+      
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }} # This only works if your workflow triggers on new tags.
+          releaseName: 'App Name v__VERSION__' # tauri-action replaces \_\_VERSION\_\_ with the app version.
+          releaseBody: 'See the assets to download and install this version.'
+          releaseDraft: true
+          prerelease: false
