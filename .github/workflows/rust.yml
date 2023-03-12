@@ -13,16 +13,48 @@ jobs:
   build:
   
     strategy:
-      fail-fast: false
       matrix:
-        platform: [macos-latest,windows-latest]
-    runs-on: ${{ matrix.platform }}
+        target:
+#           - x86_64-unknown-linux-musl
+          - x86_64-pc-windows-msvc
+          - x86_64-apple-darwin
+        include:
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            
+    runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
-      
+    - name: Checkout code
+      uses: actions/checkout@v2
 
+
+    - name: Setup Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        target: ${{ matrix.target }}
+        override: true
+      
+    - name: Build
+      uses: actions-rs/cargo@v1
+      with:
+        use-cross: true
+        command: build
+        args: --release --target=${{ matrix.target }}
+
+#     - name: Check release Directory for Linux
+#       if: matrix.target == 'x86_64-unknown-linux-musl'
+#       run: |
+#         ls target/${{ matrix.target }}/release/
+    - name: Check release Directory for windows
+      if: matrix.target == 'x86_64-pc-windows-msvc'
+      run: |
+        dir target/${{ matrix.target }}/release/
+    - name: Check release Directory for macOS
+      if: matrix.target == 'x86_64-apple-darwin'
+      run: |
+        ls target/${{ matrix.target }}/release/
