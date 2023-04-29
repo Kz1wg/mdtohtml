@@ -1,19 +1,18 @@
 mod mycss;
-use anyhow::Result;
 use maud::{html, Markup, PreEscaped, Render, DOCTYPE};
 use pulldown_cmark::{html::push_html, Options, Parser};
 use std::env;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 
-fn main() -> Result<()> {
+fn main() -> Result<(),Box<dyn std::error::Error>> {
     let app_args: Vec<String> = env::args().collect();
     let readfiles = &app_args[1..]; //可変長引数
     markdown_to_html(readfiles)?;
     Ok(())
 }
 
-fn markdown_to_html(targets: &[String]) -> Result<()> {
+fn markdown_to_html(targets: &[String]) -> Result<(),Box<dyn std::error::Error>> {
     let mdcss = mycss::gen_mdcss();
     for target in targets {
         // markdownファイルを読み込み
