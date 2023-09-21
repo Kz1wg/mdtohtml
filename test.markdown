@@ -13,3 +13,11 @@ This tool will convert markdown to html.
 |  TD  |  TD  |
 
 ![testpic](testpic.png)
+
+```rust
+let fl = std::fs::read_to_string(somefile);
+```
+
+```bash
+ls -a
+```

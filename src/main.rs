@@ -5,15 +5,17 @@ use std::env;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 
-fn main() -> Result<(),Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app_args: Vec<String> = env::args().collect();
+    // プログラムの引数から対象ファイル名を取得
     let readfiles = &app_args[1..]; //可変長引数
     markdown_to_html(readfiles)?;
     Ok(())
 }
 
-fn markdown_to_html(targets: &[String]) -> Result<(),Box<dyn std::error::Error>> {
+fn markdown_to_html(targets: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let mdcss = mycss::gen_mdcss();
+    
     for target in targets {
         // markdownファイルを読み込み
         let targetfile = File::open(target)?;
@@ -22,31 +24,36 @@ fn markdown_to_html(targets: &[String]) -> Result<(),Box<dyn std::error::Error>>
         reader.read_to_string(&mut markdownstr)?;
 
         // htmlファイルの名前を生成
-        let filename: Vec<&str> = target.split('.').collect();
-        let filetitle = filename[0].to_owned();
-        let filename = [filename[0], "html"].join(".");
-        
-        // ヘッダを生成
-        let headtext = html! {
-            header{
-            meta charset="utf-8";
-            title {(filetitle)};
-            style {(mdcss)};
-            }
-        };
+        let mut filename = env::current_dir()?;
+        filename.push(target);
+        let filetitle = filename.file_stem();
 
-        // markdownをhtmlに変換
-        let markuptext = html! {
-            (DOCTYPE)html{
-                (headtext)
-                (Markdown(&markdownstr).render())
-            }
+        if let Some(ft) = filetitle {
+            let filetitle = ft.to_string_lossy();
+            // ヘッダを生成
+            let headtext = html! {
+                header{
+                meta charset="utf-8";
+                title {(filetitle)};
+                style {(mdcss)};
+                }
+            };
+
+            // markdownをhtmlに変換
+            let markuptext = html! {
+                (DOCTYPE)html{
+                    (headtext)
+                    (Markdown(&markdownstr).render())
+                }
+            };
+            filename.set_extension("html");
+            let filename = filename.to_str().unwrap();
+            println!("file path:\n{}",filename);
+            // htmlをファイルに書き込み
+            let mut writebuffer = File::create(filename)?;
+            let outcontent = markuptext.render().into_string();
+            let _wtlen = writebuffer.write(outcontent.as_bytes())?;
         };
-        
-        // htmlをファイルに書き込み
-        let mut writebuffer = File::create(filename)?;
-        let outcontent = markuptext.render().into_string();
-        let _wtlen = writebuffer.write(outcontent.as_bytes())?;
     }
     Ok(())
 }
