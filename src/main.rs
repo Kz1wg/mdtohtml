@@ -6,21 +6,27 @@ use std::fs::File;
 use std::io::{BufReader, Read, Write};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let app_args: Vec<String> = env::args().collect();
+    let app_args = env::args().collect::<Vec<String>>();
     // プログラムの引数から対象ファイル名を取得
+    // 最初の要素は慣例で実行ファイルのPathが入っているので,二番目以降を使用
     let readfiles = &app_args[1..]; //可変長引数
     markdown_to_html(readfiles)?;
     Ok(())
 }
 
 fn markdown_to_html(targets: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    // mycssファイルのcssをstringとして取得
     let mdcss = mycss::gen_mdcss();
 
     for target in targets {
         // markdownファイルを読み込み
+        // ファイルを開く
         let targetfile = File::open(target)?;
+        // Readerを作る
         let mut reader = BufReader::new(targetfile);
+        // Stringバッファを確保
         let mut markdownstr = String::new();
+        // Stringバッファにファイルの内容を読み込む
         reader.read_to_string(&mut markdownstr)?;
 
         // htmlファイルの名前を生成
@@ -81,7 +87,7 @@ impl<T: AsRef<str>> Render for Markdown<T> {
         parseoption.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
         // タスクリスト
         parseoption.insert(pulldown_cmark::Options::ENABLE_TASKLISTS);
-        
+
         let mut my_html = String::new();
         let parser = pulldown_cmark::Parser::new_ext(self.0.as_ref(), parseoption);
         push_html(&mut my_html, parser);
