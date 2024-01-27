@@ -73,9 +73,7 @@ pub fn gen_mdcss() -> String {
       border-radius: 5px;
   }
  
-  p code,
-  li code,
-  td code {
+  code {
       font-family: 'Consolas', 'Courier New', monospace;
       background-color: darkslateblue;
       color: cornsilk;
@@ -90,8 +88,7 @@ pub fn gen_mdcss() -> String {
   /* list */
   /*//////////////////////////////////////////////*/
  
-  ul,
-  ol {
+  ul, ol {
       padding: 0 0 0.5em 1.5em;
   }
  
@@ -161,14 +158,12 @@ pub fn gen_mdcss() -> String {
       padding: 1em;
   }
  
-  .box_pink ul,
-  .box_pink ol {
+  .box_pink ul, .box_pink ol {
       padding: 0 0 0 1.5em;
   }
  
  
-  .box_gray ul,
-  .box_gray ol {
+  .box_gray ul, .box_gray ol {
       padding: 0 0 0 1.5em;
   }  
   "#
