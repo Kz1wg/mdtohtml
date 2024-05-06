@@ -1,11 +1,11 @@
 pub fn gen_mdcss() -> String {
-  r#"
+    r#"
   /*//////////////////////////////////////////////*/
   /* common */
   /*//////////////////////////////////////////////*/
  
   body {
-     font-family:'Courier New', Courier, monospace;
+     font-family:'Hiragino Kaku Gothic ProN','メイリオ',Osaka, Arial, Helvetica;
      color: #1b1b1b;
      font-size: medium;
   }

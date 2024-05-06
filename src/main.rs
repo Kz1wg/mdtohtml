@@ -25,12 +25,20 @@ fn main() -> MyResult<()> {
 fn markdown_to_html(targets: &Vec<PathBuf>) -> MyResult<()> {
     for target in targets {
         // // markdownファイルを読み込み
-        if target.is_file() {
-            let md_extention = target.extension().unwrap().to_str();
-            match md_extention.unwrap() {
-                "md" | "markdown" | "mdown" => convert_md(target)?,
-                _ => (),
+        if !target.is_file() {
+            continue;
+        }
+        let md_extention = target.extension().unwrap().to_str();
+        match md_extention.unwrap() {
+            "md" | "markdown" | "mdown" => {
+                if let Err(e) = convert_md(target) {
+                    eprintln!("{}", e)
+                }
             }
+            _ => println!(
+                "{}は無効です。md|markdown|mdownのいずれかの拡張子を含むファイルを指定してください",
+                target.to_str().unwrap()
+            ),
         }
     }
 
@@ -101,7 +109,7 @@ fn convert_md(target: &Path) -> MyResult<()> {
         // filenameの拡張子をhtmlに変更
         filename.set_extension("html");
         let filename = filename.to_str().unwrap();
-        println!("file path:\n{}", filename);
+        println!("The following files have been created:\n{}", filename);
         // writerを準備
         let mut writebuffer = File::create(filename)?;
         // マークダウンをhtmlに変換レンダリング
