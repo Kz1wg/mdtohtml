@@ -28,8 +28,11 @@ fn markdown_to_html(targets: &Vec<PathBuf>) -> MyResult<()> {
         if !target.is_file() {
             continue;
         }
-        let md_extention = target.extension().unwrap().to_str();
-        match md_extention.unwrap() {
+        let md_extention = match target.extension() {
+            Some(ex) => ex.to_string_lossy().to_string(),
+            None => continue,
+        };
+        match md_extention.as_str() {
             "md" | "markdown" | "mdown" => {
                 if let Err(e) = convert_md(target) {
                     eprintln!("{}", e)
