@@ -1,171 +1,166 @@
 pub fn gen_mdcss() -> String {
     r#"
-  /*//////////////////////////////////////////////*/
-  /* common */
-  /*//////////////////////////////////////////////*/
- 
-  body {
-     font-family:'Hiragino Kaku Gothic ProN','メイリオ',Osaka, Arial, Helvetica;
-     color: #1b1b1b;
-     font-size: medium;
-  }
- 
-  /*//////////////////////////////////////////////*/
-  /* title */
-  /*//////////////////////////////////////////////*/
- 
-  h1 {
-      font-size: 36px;
-      font-weight: bold;
-      padding: 20px 0;
-  }
- 
-  h2 {
-      font-size: 22px;
-      font-weight: bold;
-      background-color: #33ad9d;
-      color: #e5e8e8;
-      padding: 10px 15px;
-      border-radius: 5px;
-      margin: 40px 0 10px;
-  }
- 
-  h3 {
-      font-size: 22px;
-      font-weight: bold;
-      border-bottom: 3px solid #33ad9d;
-      margin: 40px 0 10px;
-  }
- 
-  h4 {
-      font-size: 18px;
-      font-weight: bold;
-      border-left: 3px solid #33ad9d;
-      margin: 40px 0 10px;
-      padding: 0 0 0 10px;
-  }
- 
-  h5 {
-      font-size: 16px;
-      margin: 40px 0 10px;
-      font-weight: bold;
-  }
- 
-  /*//////////////////////////////////////////////*/
-  /* tags */
-  /*//////////////////////////////////////////////*/
- 
-  hr {
-      height: 1px;
-      background-color: #b8bfbe;
-      margin: 20px 0;
-  }
- 
-  em {
-      background: linear-gradient(transparent 80%, #e7ff46 80%);
-      padding: 0 5px;
-      font-style: normal;
-  }
- 
-  strong {
-      background: linear-gradient(transparent 0%, #e7ff46 0%);
-      padding: 0 5px;
-      border-radius: 5px;
-  }
- 
-  code {
-      font-family: 'Consolas', 'Courier New', monospace;
-      background-color: darkslateblue;
-      color: cornsilk;
-      font-size: 90%;
-      font-style: normal;
-      padding: 0 5px;
-      border-radius: 3px;
-  }
- 
- 
-  /*//////////////////////////////////////////////*/
-  /* list */
-  /*//////////////////////////////////////////////*/
- 
-  ul, ol {
-      padding: 0 0 0.5em 1.5em;
-  }
- 
- 
- 
- 
- 
- 
- 
-  /*//////////////////////////////////////////////*/
-  /* table */
-  /*//////////////////////////////////////////////*/
- 
-  table {
-      border-collapse: collapse;
-      border: 1px solid #b7bdbc !important;
-      line-height: 1.5;
-      margin: 10px 0;
-      /* width: 100%; */
-  }
- 
-  table th {
-      padding: 10px;
-      font-size: 12px;
-      font-weight: bold;
-      vertical-align: top;
-      text-align: left;
-      background: #c6cbca;
-      border: 1px solid #b7bdbc !important;
-  }
- 
-  table td {
-      font-size: 12px;
-      padding: 10px;
-      vertical-align: top;
-      border: 1px solid #b7bdbc !important;
-  }
- 
-  /* stripe */
-  table.stripe tr:nth-child(even) {
-      background: #dcdfdf;
-  }
- 
-  /* dark th */
-  table.dark th {
-      color: #e5e8e8;
-      background: #272b2b;
-  }
- 
-  /*//////////////////////////////////////////////*/
-  /* box */
-  /*//////////////////////////////////////////////*/
- 
-  .box_gray {
-      background: #c9d2d2;
-      border: 2px solid #b8bfbe;
-      border-radius: 10px;
-      margin: 20px 0;
-      padding: 1em;
-  }
- 
-  .box_pink {
-      background: #ddcccc;
-      border: 2px solid #d47e7e;
-      border-radius: 10px;
-      margin: 20px 0;
-      padding: 1em;
-  }
- 
-  .box_pink ul, .box_pink ol {
-      padding: 0 0 0 1.5em;
-  }
- 
- 
-  .box_gray ul, .box_gray ol {
-      padding: 0 0 0 1.5em;
-  }  
+body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #f5f5f5;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    color: #2c3e50;
+    margin-top: 24px;
+    margin-bottom: 16px;
+    font-weight: 600;
+}
+
+h1 {
+    font-size: 2.5em;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 10px;
+}
+
+h2 {
+    font-size: 2em;
+}
+
+h3 {
+    font-size: 1.5em;
+}
+
+a {
+    color: #3498db;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+
+pre {
+    background-color: #f8f8f8;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 16px;
+    overflow: auto;
+}
+
+
+blockquote {
+    border-left: 4px solid #3498db;
+    margin: 0;
+    padding-left: 20px;
+    color: #555;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 16px;
+}
+
+th,
+td {
+    text-align: left;
+    padding: 12px;
+    border-bottom: 1px solid #ddd;
+}
+
+th {
+    background-color: #3498db;
+    color: white;
+}
+
+tr:nth-child(even) {
+    background-color: #f2f2f2;
+}
+
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+hr {
+    border: 0;
+    border-top: 1px solid #ddd;
+    margin: 20px 0;
+}
+
+
+/* インラインコードのスタイル */
+code {
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+    border: none;
+    border-radius: 5px;
+    font-family: Consolas, Monaco, monospace;
+    font-size: 0.9em;
+    padding: 2px 4px;
+    position: relative;
+}
+
+
+/* コードブロックのスタイル */
+
+/* 背景と文字色の設定 */
+pre code {
+    background-color: #2d2d2d;
+    /* ダーク背景 */
+    color: #f8f8f2;
+    /* 文字色 */
+    padding: 10px;
+    border-radius: 5px;
+    display: block;
+    overflow-x: auto;
+}
+
+/* コメント */
+pre code .comment {
+    color: #75715e;
+    font-style: italic;
+}
+
+/* 文字列 */
+pre code .string {
+    color: #e6db74;
+}
+
+/* キーワード */
+pre code .keyword {
+    color: #f92672;
+    font-weight: bold;
+}
+
+/* 関数名 */
+pre code .function {
+    color: #a6e22e;
+}
+
+/* 数値 */
+pre code .number {
+    color: #ae81ff;
+}
+
+/* 定数や変数 */
+pre code .variable {
+    color: #f8f8f2;
+}
+
+/* セレクタなど */
+pre code .selector {
+    color: #66d9ef;
+}
+
+
   "#
     .to_string()
 }

@@ -16,9 +16,12 @@ This tool will convert markdown to html.
 
 ```rust
 let fl = std::fs::read_to_string(somefile);
+// test
+let teststr = "This is test"
 ```
 
 ```bash
+# ターミナルコマンド
 ls -a
 ```
 
