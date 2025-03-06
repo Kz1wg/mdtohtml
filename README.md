@@ -28,3 +28,5 @@ mdtohtml test.md
 ## 見出し１
 
 * リスト
+
+$$\frac{\sqrt{x_a^3}}{2}$$

@@ -22,7 +22,7 @@ fn main() -> MyResult<()> {
     Ok(())
 }
 
-fn markdown_to_html(targets: &Vec<PathBuf>) -> MyResult<()> {
+fn markdown_to_html(targets: &[PathBuf]) -> MyResult<()> {
     for target in targets {
         // // markdownファイルを読み込み
         if !target.is_file() {
@@ -64,10 +64,15 @@ impl<T: AsRef<str>> Render for Markdown<T> {
         parseoption.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
         // タスクリスト
         parseoption.insert(pulldown_cmark::Options::ENABLE_TASKLISTS);
+        // Tex
+        parseoption.insert(pulldown_cmark::Options::ENABLE_MATH);
+        // GitHub Flaverd Markdown
+        parseoption.insert(pulldown_cmark::Options::ENABLE_GFM);
 
         let mut my_html = String::new();
         let parser = pulldown_cmark::Parser::new_ext(self.0.as_ref(), parseoption);
         push_html(&mut my_html, parser);
+
         PreEscaped(my_html)
     }
 }
@@ -97,7 +102,7 @@ fn convert_md(target: &Path) -> MyResult<()> {
         // ヘッダを生成
         let headtext = html! {
             header{
-            meta charset="utf-8";
+            meta charset="UTF-8";
             title {(filetitle)};
             style {(mdcss)};
             }

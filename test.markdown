@@ -34,3 +34,17 @@ ls -a
 * 大根
 * 小みかん
 * 羅臼ぶり
+
+* Fruit
+   * Apple
+   * Orange
+   * Banana
+* Dairy
+   * Milk
+   * Cheese
+
+
+
+[Harricane][1] is big storm. This big storm is called [hurricane][1] in the United States.
+
+[1]:https://w.wiki/qYn
