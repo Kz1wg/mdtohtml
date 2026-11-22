@@ -1,5 +1,6 @@
 use syntect::easy::HighlightLines;
-use syntect::highlighting::ThemeSet;
+use std::sync::OnceLock;
+use syntect::highlighting::{Theme, ThemeSet};
 use syntect::html::{styled_line_to_highlighted_html, IncludeBackground};
 use syntect::parsing::SyntaxSet;
 
@@ -34,11 +35,17 @@ fn normalize_lang(lang: &str) -> String {
 /// コードとその言語名を受け取り、ハイライト済みの HTML 文字列を返す。
 /// 認識できない言語の場合はプレーンな `<pre><code>` ブロックにフォールバックする。
 pub fn highlight_code(code: &str, lang: &str) -> String {
-    let ss = SyntaxSet::load_defaults_newlines();
-    let ts = ThemeSet::load_defaults();
-
+    // 構文定義とテーマの読み込みは重いので、プロセス内で1回だけ行う
+    static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
+    static THEME: OnceLock<Theme> = OnceLock::new();
+    let ss = SYNTAX_SET.get_or_init(SyntaxSet::load_defaults_newlines);
     // テーマ: "base16-ocean.dark" / "base16-eighties.dark" / "Solarized (dark)" 等から選択
-    let theme = &ts.themes["Solarized (light)"];
+    let theme = THEME.get_or_init(|| {
+        ThemeSet::load_defaults()
+            .themes
+            .remove("Solarized (light)")
+            .expect("組み込みテーマが見つかりません")
+    });
 
     let norm = normalize_lang(lang);
     let syntax = ss
@@ -50,7 +57,7 @@ pub fn highlight_code(code: &str, lang: &str) -> String {
     let mut html = String::from("<pre><code>");
 
     for line in syntect::util::LinesWithEndings::from(code) {
-        match hl.highlight_line(line, &ss) {
+        match hl.highlight_line(line, ss) {
             Ok(ranges) => {
                 match styled_line_to_highlighted_html(&ranges[..], IncludeBackground::No) {
                     Ok(line_html) => html.push_str(&line_html),
