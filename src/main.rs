@@ -4,6 +4,7 @@ mod mycss;
 use clap::Parser;
 use maud::{html, PreEscaped, DOCTYPE};
 use pulldown_cmark::{self, html::push_html, CodeBlockKind, CowStr, Event, Tag, TagEnd};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -33,6 +34,14 @@ struct Cli {
     /// テーブルが本文幅の何倍まで広がれるか（1.0〜3.0）。超える分はテーブル内で横スクロール
     #[arg(long, default_value_t = 1.2, value_parser = parse_table_scale)]
     table_scale: f64,
+
+    /// Markdown ファイル(.md/.markdown/.mdown)へのリンクを .html に書き換える（外部 URL は対象外、リンク先が無ければ警告）
+    #[arg(short = 'l', long)]
+    md_links: bool,
+
+    /// リンク先の Markdown も辿って一括変換する（-l を含む）。辿るのは指定ファイルのフォルダ以下のみ
+    #[arg(short, long)]
+    recursive: bool,
 }
 
 /// 変換時のオプション
@@ -40,6 +49,7 @@ struct ConvertOptions {
     embed_images: bool,
     width: String,
     table_scale: f64,
+    md_links: bool,
 }
 
 /// --table-scale の値を検証する
@@ -75,66 +85,176 @@ fn main() -> MyResult<()> {
         embed_images: cli.embed_images,
         width: cli.width,
         table_scale: cli.table_scale,
+        // リンク先を一括変換するならリンクの書き換えも必須
+        md_links: cli.md_links || cli.recursive,
     };
 
-    markdown_to_html(&cli.filename, &opts);
+    let mut conv = Converter::new(&opts, cli.recursive, &cli.filename);
+    let count = conv.process(&cli.filename);
+    if cli.recursive {
+        println!("{count} ファイル変換しました");
+    }
 
     if cli.watch {
-        watch_files(&cli.filename, &opts);
+        conv.watch();
     }
     Ok(())
 }
 
-fn markdown_to_html(targets: &[PathBuf], opts: &ConvertOptions) {
-    for target in targets {
-        convert_one(target, opts);
-    }
-}
-
-fn convert_one(target: &Path, opts: &ConvertOptions) {
+/// 1ファイルを変換し、文書内のローカル Markdown リンク先（存在するもの）を返す
+fn convert_one(target: &Path, opts: &ConvertOptions) -> Vec<PathBuf> {
     if !target.is_file() {
         eprintln!("スキップ: {} はファイルではありません", target.display());
-        return;
+        return Vec::new();
     }
     match target.extension().and_then(|e| e.to_str()) {
-        Some("md" | "markdown" | "mdown") => {
-            if let Err(e) = convert_md(target, opts) {
+        Some("md" | "markdown" | "mdown") => match convert_md(target, opts) {
+            Ok(links) => links,
+            Err(e) => {
                 eprintln!("変換エラー [{}]: {}", target.display(), e);
+                Vec::new()
             }
+        },
+        _ => {
+            eprintln!(
+                "{} は無効です。md / markdown / mdown の拡張子を持つファイルを指定してください",
+                target.display()
+            );
+            Vec::new()
         }
-        _ => eprintln!(
-            "{} は無効です。md / markdown / mdown の拡張子を持つファイルを指定してください",
-            target.display()
-        ),
     }
 }
 
-// ── ファイル監視 ─────────────────────────────────────────────────────────────
+// ── 変換キュー（--recursive）と監視（--watch） ─────────────────────────────────
+
+/// --recursive で辿るファイル数の上限（暴走防止の最終安全弁）
+const MAX_RECURSIVE_FILES: usize = 30;
+
+/// 変換対象の管理。暴走防止のため次の3つを守る:
+/// 1. 同じファイル（正規化した絶対パスで判定）は1回の処理で1度しか変換しない
+/// 2. 辿るのは最初に指定したファイルのフォルダ以下だけ
+/// 3. 辿って追加するファイルは全体で MAX_RECURSIVE_FILES 個まで
+struct Converter<'a> {
+    opts: &'a ConvertOptions,
+    recursive: bool,
+    /// 辿ってよい範囲（最初に指定したファイルのフォルダ）
+    roots: Vec<PathBuf>,
+    /// 変換対象として登録済みのファイル（正規化済み）
+    known: HashSet<PathBuf>,
+    /// 監視対象（登録順）
+    files: Vec<PathBuf>,
+    /// 範囲外・上限超過の通知を繰り返さないための記録
+    notified: HashSet<PathBuf>,
+}
+
+impl<'a> Converter<'a> {
+    fn new(opts: &'a ConvertOptions, recursive: bool, initial: &[PathBuf]) -> Self {
+        let roots = initial
+            .iter()
+            .filter_map(|p| fs::canonicalize(p).ok())
+            .filter_map(|p| p.parent().map(Path::to_path_buf))
+            .collect();
+        Self {
+            opts,
+            recursive,
+            roots,
+            known: HashSet::new(),
+            files: Vec::new(),
+            notified: HashSet::new(),
+        }
+    }
+
+    /// starts を変換し、--recursive ならリンク先の未変換ファイルも辿って変換する。
+    /// 変換したファイル数を返す
+    fn process(&mut self, starts: &[PathBuf]) -> usize {
+        let mut queue: VecDeque<PathBuf> = VecDeque::new();
+        let mut queued_now: HashSet<PathBuf> = HashSet::new();
+        for s in starts {
+            let key = fs::canonicalize(s).unwrap_or_else(|_| s.clone());
+            if !queued_now.insert(key.clone()) {
+                continue; // 同じファイルの重複指定
+            }
+            if self.known.insert(key) {
+                self.files.push(s.clone());
+            }
+            queue.push_back(s.clone());
+        }
+
+        let mut count = 0;
+        while let Some(path) = queue.pop_front() {
+            let links = convert_one(&path, self.opts);
+            count += 1;
+            if !self.recursive {
+                continue;
+            }
+            for link in links {
+                let Ok(c) = fs::canonicalize(&link) else { continue };
+                if self.known.contains(&c) {
+                    continue; // 変換済み・登録済み（循環リンクもここで止まる）
+                }
+                if !self.roots.iter().any(|r| c.starts_with(r)) {
+                    if self.notified.insert(c.clone()) {
+                        eprintln!(
+                            "範囲外のため変換しません（リンクは .html に書き換え済み）: {}",
+                            c.display()
+                        );
+                    }
+                    continue;
+                }
+                if self.known.len() >= MAX_RECURSIVE_FILES {
+                    if self.notified.insert(c.clone()) {
+                        eprintln!(
+                            "上限 {MAX_RECURSIVE_FILES} ファイルに達したため変換しません: {}",
+                            c.display()
+                        );
+                    }
+                    continue;
+                }
+                self.known.insert(c.clone());
+                self.files.push(c.clone());
+                queue.push_back(c);
+            }
+        }
+        count
+    }
+
+    /// 更新日時をポーリングし、変更されたファイルだけ再変換する。
+    /// --recursive 時は新たに増えたリンク先も変換して監視対象に加える
+    fn watch(&mut self) {
+        println!("変更を監視しています… (Ctrl+C で終了)");
+        let mut last: HashMap<PathBuf, Option<SystemTime>> = HashMap::new();
+        loop {
+            // 新しく加わったファイルの現在の更新日時を記録（変更扱いにしない）
+            for f in &self.files {
+                last.entry(f.clone()).or_insert_with(|| modified_time(f));
+            }
+            std::thread::sleep(Duration::from_millis(500));
+
+            let changed: Vec<PathBuf> = self
+                .files
+                .iter()
+                .filter(|f| {
+                    let now = modified_time(f);
+                    now.is_some() && last.get(*f) != Some(&now)
+                })
+                .cloned()
+                .collect();
+            for f in changed {
+                last.insert(f.clone(), modified_time(&f));
+                self.process(std::slice::from_ref(&f));
+            }
+        }
+    }
+}
 
 fn modified_time(path: &Path) -> Option<SystemTime> {
     fs::metadata(path).and_then(|m| m.modified()).ok()
 }
 
-/// 更新日時をポーリングし、変更されたファイルだけ再変換する
-fn watch_files(targets: &[PathBuf], opts: &ConvertOptions) {
-    println!("変更を監視しています… (Ctrl+C で終了)");
-    let mut last: Vec<Option<SystemTime>> = targets.iter().map(|t| modified_time(t)).collect();
-    loop {
-        std::thread::sleep(Duration::from_millis(500));
-        for (target, prev) in targets.iter().zip(last.iter_mut()) {
-            let now = modified_time(target);
-            if now.is_some() && now != *prev {
-                *prev = now;
-                convert_one(target, opts);
-            }
-        }
-    }
-}
-
 // ── Markdown レンダラー ──────────────────────────────────────────────────────
 
-/// Markdown を HTML に変換する。戻り値の bool は数式を含むかどうか
-fn render_markdown(md: &str, base_dir: &Path, opts: &ConvertOptions) -> (String, bool) {
+/// Markdown を HTML に変換する。戻り値は (HTML, 数式を含むか, 存在するローカル Markdown リンク先)
+fn render_markdown(md: &str, base_dir: &Path, opts: &ConvertOptions) -> (String, bool, Vec<PathBuf>) {
     let mut popts = pulldown_cmark::Options::empty();
     popts.insert(pulldown_cmark::Options::ENABLE_TABLES);
     popts.insert(pulldown_cmark::Options::ENABLE_SMART_PUNCTUATION);
@@ -152,10 +272,15 @@ fn render_markdown(md: &str, base_dir: &Path, opts: &ConvertOptions) -> (String,
     if opts.embed_images {
         embed_images(&mut events, base_dir);
     }
+    let links = if opts.md_links {
+        rewrite_md_links(&mut events, base_dir)
+    } else {
+        Vec::new()
+    };
 
     let mut html_out = String::new();
     push_html(&mut html_out, events.into_iter());
-    (html_out, has_math)
+    (html_out, has_math, links)
 }
 
 /// コードブロックをハイライト済み HTML に置き換え、テーブルをラッパーで囲む
@@ -276,6 +401,62 @@ fn rewrite_table_cells<'a>(
     out
 }
 
+// ── Markdown リンクの書き換え ────────────────────────────────────────────────
+
+/// Markdown ファイルへのリンクを .html へのリンクに書き換え、存在するリンク先のパスを返す
+fn rewrite_md_links(events: &mut [Event], base_dir: &Path) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    for ev in events.iter_mut() {
+        if let Event::Start(Tag::Link { dest_url, .. }) = ev {
+            if let Some((new_url, md_path)) = md_link_to_html(dest_url) {
+                let local = base_dir.join(md_path.replace("%20", " "));
+                if !local.is_file() {
+                    eprintln!(
+                        "警告: リンク先の Markdown が見つかりません: {} (リンク: {})",
+                        local.display(),
+                        dest_url
+                    );
+                } else {
+                    found.push(local);
+                }
+                *dest_url = CowStr::from(new_url);
+            }
+        }
+    }
+    found
+}
+
+/// リンク先が Markdown ファイルなら (書き換え後の URL, パス部分) を返す。
+/// 外部 URL・mailto・ページ内アンカー・他の拡張子は None
+fn md_link_to_html(url: &str) -> Option<(String, String)> {
+    if url.is_empty() || url.starts_with('#') || has_url_scheme(url) {
+        return None;
+    }
+    // パス部分と、? や # 以降（クエリ・アンカー）を分ける
+    let split_at = url.find(['?', '#']).unwrap_or(url.len());
+    let (path, suffix) = url.split_at(split_at);
+
+    let dot = path.rfind('.')?;
+    if path[dot..].contains('/') {
+        return None; // ディレクトリ名中のドットは拡張子ではない
+    }
+    let ext = path[dot + 1..].to_ascii_lowercase();
+    if !matches!(ext.as_str(), "md" | "markdown" | "mdown") {
+        return None;
+    }
+    Some((format!("{}.html{}", &path[..dot], suffix), path.to_string()))
+}
+
+/// "https:" や "mailto:" のような URL スキームで始まるか
+fn has_url_scheme(url: &str) -> bool {
+    match url.find(':') {
+        Some(i) if i > 0 => url[..i]
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')),
+        _ => false,
+    }
+}
+
 // ── 画像埋め込み ─────────────────────────────────────────────────────────────
 
 /// ローカル画像のパスを data URI に書き換える（読めない画像はそのまま残す）
@@ -349,7 +530,7 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 </script>"#;
 
-fn convert_md(target: &Path, opts: &ConvertOptions) -> MyResult<()> {
+fn convert_md(target: &Path, opts: &ConvertOptions) -> MyResult<Vec<PathBuf>> {
     let mdcss = mycss::gen_mdcss(&opts.width, opts.table_scale);
     let markdownstr = fs::read_to_string(target)?;
 
@@ -364,7 +545,7 @@ fn convert_md(target: &Path, opts: &ConvertOptions) -> MyResult<()> {
         .unwrap_or_else(|| "document".to_owned());
 
     let base_dir = target.parent().unwrap_or_else(|| Path::new("."));
-    let (body_html, has_math) = render_markdown(&markdownstr, base_dir, opts);
+    let (body_html, has_math, links) = render_markdown(&markdownstr, base_dir, opts);
 
     let markup = html! {
         (DOCTYPE)
@@ -384,7 +565,7 @@ fn convert_md(target: &Path, opts: &ConvertOptions) -> MyResult<()> {
 
     fs::write(&out_path, markup.into_string())?;
     println!("生成しました: {}", out_path.display());
-    Ok(())
+    Ok(links)
 }
 
 #[cfg(test)]
@@ -407,6 +588,21 @@ mod tests {
         assert_eq!(parse_width("60em").unwrap(), "60em");
         assert!(parse_width("abc").is_err());
         assert!(parse_width("10px;}").is_err());
+    }
+
+    #[test]
+    fn md_link_rewriting() {
+        let conv = |u: &str| md_link_to_html(u).map(|(url, _)| url);
+        assert_eq!(conv("design.md").as_deref(), Some("design.html"));
+        assert_eq!(conv("docs/setup.markdown#install").as_deref(), Some("docs/setup.html#install"));
+        assert_eq!(conv("README.MD?v=1").as_deref(), Some("README.html?v=1"));
+        assert_eq!(conv("../a.mdown").as_deref(), Some("../a.html"));
+        assert_eq!(conv("https://example.com/a.md"), None);
+        assert_eq!(conv("mailto:a@example.com"), None);
+        assert_eq!(conv("#top"), None);
+        assert_eq!(conv("pic.png"), None);
+        assert_eq!(conv("v1.md/index"), None);
+        assert_eq!(md_link_to_html("a.md#x").unwrap().1, "a.md");
     }
 
     #[test]
