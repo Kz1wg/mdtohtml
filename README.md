@@ -39,7 +39,6 @@ To try it without installing, run something like `cargo run -- test.markdown` in
 ```bash
 mdtohtml README.md                  # generates README.html
 mdtohtml a.md b.md docs/*.md        # convert several files at once
-mdtohtml -w memo.md                 # re-convert automatically on every save
 mdtohtml -r index.md                # also convert the Markdown files it links to
 mdtohtml -e report.md               # embed images so the HTML is a single shareable file
 ```
@@ -53,7 +52,6 @@ Supported extensions are `.md`, `.markdown`, and `.mdown`.
 | Option | Description |
 |---|---|
 | `-e`, `--embed-images` | Embed local images into the HTML as base64 |
-| `-w`, `--watch` | Watch the files and re-convert on every change (Ctrl+C to stop) |
 | `--width <WIDTH>` | Maximum width of the body text (default `800px`). A plain number is treated as px; values such as `90%` or `60em` also work |
 | `--table-scale <RATIO>` | How far tables may extend beyond the body width (default `1.2`, range 1.0–3.0) |
 | `-l`, `--md-links` | Rewrite links to Markdown files so they point to the `.html` files |
@@ -93,13 +91,11 @@ With `-r`, the linked Markdown files are converted too.
   - If a matching `.html` file already exists, the link points to it instead
 - Each file is converted only once, so circular links do not cause loops
 - At most 30 files are converted in one run
-- Combined with `-w`, every file that was followed is watched. Files linked from new links are converted and watched automatically
 
 ## Notes
 
 - **Math**: KaTeX is loaded from a CDN, so math is shown as plain text when the file is opened offline. KaTeX is only loaded for documents that contain math
 - **Embedding images (`-e`)**: only local images are embedded. Images referenced by URL are not
-- **Watching (`-w`)**: only the Markdown files are watched. Replacing an image does not trigger a re-conversion
 
 ## Customizing the look
 
@@ -121,7 +117,6 @@ mdtohtml --css company.css report.md
 ```
 
 - `--css` can be given more than once. Later files take precedence
-- Combined with `-w`, saving the CSS file also re-converts every file
 - Besides variables, you can write ordinary CSS rules (for example `body { font-family: ...; }`)
 
 The main variables are listed below. All of them are in `:root { ... }` at the top of [src/mycss.rs](src/mycss.rs).

@@ -4,11 +4,10 @@ mod mycss;
 use clap::Parser;
 use maud::{html, PreEscaped, DOCTYPE};
 use pulldown_cmark::{self, html::push_html, CodeBlockKind, CowStr, Event, Tag, TagEnd};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
 
 type MyResult<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -22,10 +21,6 @@ struct Cli {
     /// ローカル画像を base64 で HTML に埋め込み、HTML 1ファイルで共有できるようにする
     #[arg(short, long)]
     embed_images: bool,
-
-    /// ファイルの変更を監視し、保存のたびに自動で再変換する（Ctrl+C で終了）
-    #[arg(short, long)]
-    watch: bool,
 
     /// 本文の最大幅。数値のみなら px として扱う（例: 1000, 1000px, 90%, 60em）
     #[arg(long, default_value = "800px", value_parser = parse_width)]
@@ -111,10 +106,6 @@ fn main() -> MyResult<()> {
     if cli.recursive {
         println!("{count} ファイル変換しました");
     }
-
-    if cli.watch {
-        conv.watch();
-    }
     Ok(())
 }
 
@@ -142,7 +133,7 @@ fn convert_one(target: &Path, opts: &ConvertOptions) -> Vec<PathBuf> {
     }
 }
 
-// ── 変換キュー（--recursive）と監視（--watch） ─────────────────────────────────
+// ── 変換キュー（--recursive） ───────────────────────────────────────────────────────────────────────────────
 
 /// --recursive で辿るファイル数の上限（暴走防止の最終安全弁）
 const MAX_RECURSIVE_FILES: usize = 30;
@@ -158,8 +149,6 @@ struct Converter<'a> {
     roots: Vec<PathBuf>,
     /// 変換対象として登録済みのファイル（正規化済み）
     known: HashSet<PathBuf>,
-    /// 監視対象（登録順）
-    files: Vec<PathBuf>,
     /// 範囲外・上限超過の通知を繰り返さないための記録
     notified: HashSet<PathBuf>,
 }
@@ -171,7 +160,6 @@ impl<'a> Converter<'a> {
             recursive,
             roots: opts.scope.clone().unwrap_or_default(),
             known: HashSet::new(),
-            files: Vec::new(),
             notified: HashSet::new(),
         }
     }
@@ -186,9 +174,7 @@ impl<'a> Converter<'a> {
             if !queued_now.insert(key.clone()) {
                 continue; // 同じファイルの重複指定
             }
-            if self.known.insert(key) {
-                self.files.push(s.clone());
-            }
+            self.known.insert(key);
             queue.push_back(s.clone());
         }
 
@@ -217,62 +203,12 @@ impl<'a> Converter<'a> {
                     continue;
                 }
                 self.known.insert(c.clone());
-                self.files.push(c.clone());
                 queue.push_back(c);
             }
         }
         count
     }
 
-    /// 更新日時をポーリングし、変更されたファイルだけ再変換する。
-    /// --recursive 時は新たに増えたリンク先も変換して監視対象に加える
-    fn watch(&mut self) {
-        println!("変更を監視しています… (Ctrl+C で終了)");
-        let mut last: HashMap<PathBuf, Option<SystemTime>> = HashMap::new();
-        loop {
-            // 新しく加わったファイルの現在の更新日時を記録（変更扱いにしない）
-            for f in &self.files {
-                last.entry(f.clone()).or_insert_with(|| modified_time(f));
-            }
-            for f in &self.opts.extra_css {
-                last.entry(f.clone()).or_insert_with(|| modified_time(f));
-            }
-            std::thread::sleep(Duration::from_millis(500));
-
-            // 追加 CSS が変わったら、全ファイルを再変換する
-            let css_changed = self.opts.extra_css.iter().fold(false, |acc, f| {
-                let now = modified_time(f);
-                if now.is_some() && last.get(f) != Some(&now) {
-                    last.insert(f.clone(), now);
-                    true
-                } else {
-                    acc
-                }
-            });
-            if css_changed {
-                for f in &self.files {
-                    last.insert(f.clone(), modified_time(f));
-                }
-                let all = self.files.clone();
-                self.process(&all);
-                continue;
-            }
-
-            let changed: Vec<PathBuf> = self
-                .files
-                .iter()
-                .filter(|f| {
-                    let now = modified_time(f);
-                    now.is_some() && last.get(*f) != Some(&now)
-                })
-                .cloned()
-                .collect();
-            for f in changed {
-                last.insert(f.clone(), modified_time(&f));
-                self.process(std::slice::from_ref(&f));
-            }
-        }
-    }
 }
 
 /// パスを正規化した絶対パスにする。
@@ -300,10 +236,6 @@ fn scope_roots(initial: &[PathBuf]) -> Vec<PathBuf> {
 /// 正規化済みのパスが範囲内か
 fn in_scope(canonical: &Path, roots: &[PathBuf]) -> bool {
     roots.iter().any(|r| canonical.starts_with(r))
-}
-
-fn modified_time(path: &Path) -> Option<SystemTime> {
-    fs::metadata(path).and_then(|m| m.modified()).ok()
 }
 
 // ── Markdown レンダラー ──────────────────────────────────────────────────────
