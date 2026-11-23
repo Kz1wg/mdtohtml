@@ -11,7 +11,7 @@ The CSS is embedded in the output, so each generated file can be opened directly
 
 ### Prebuilt binaries (no Rust needed)
 
-Download the zip for your OS from [Releases](https://github.com/KIwGucci/mdtohtml/releases) and extract it.
+Download the zip for your OS from [Releases](https://github.com/Kz1wg/mdtohtml/releases) and extract it.
 
 | OS | File |
 |---|---|
@@ -58,6 +58,7 @@ Supported extensions are `.md`, `.markdown`, and `.mdown`.
 | `--table-scale <RATIO>` | How far tables may extend beyond the body width (default `1.2`, range 1.0–3.0) |
 | `-l`, `--md-links` | Rewrite links to Markdown files so they point to the `.html` files |
 | `-r`, `--recursive` | Also convert the Markdown files that are linked to (implies `-l`) |
+| `--css <FILE>` | Load an extra CSS file to override colors and other styles (can be repeated) |
 | `-h`, `--help` | Show help |
 | `-V`, `--version` | Show version |
 
@@ -102,8 +103,28 @@ With `-r`, the linked Markdown files are converted too.
 
 ## Customizing the look
 
-Colors are set with the CSS variables in `:root { ... }` at the top of [src/mycss.rs](src/mycss.rs).
-The main variables are:
+### Override with `--css` (recommended)
+
+Pass your own CSS file with `--css`. It is loaded after the built-in CSS,
+so you only need to write the variables you want to change.
+
+```css
+/* company.css: for work documents */
+:root {
+    --color-th-bg:   #00598f;
+    --color-heading: #00395c;
+}
+```
+
+```bash
+mdtohtml --css company.css report.md
+```
+
+- `--css` can be given more than once. Later files take precedence
+- Combined with `-w`, saving the CSS file also re-converts every file
+- Besides variables, you can write ordinary CSS rules (for example `body { font-family: ...; }`)
+
+The main variables are listed below. All of them are in `:root { ... }` at the top of [src/mycss.rs](src/mycss.rs).
 
 | Variable | Purpose |
 |---|---|
@@ -114,5 +135,7 @@ The main variables are:
 | `--color-checkbox` | Color of checked checkboxes |
 | `--color-target-flash` | Highlight color for the heading a link jumps to |
 
-After making changes, reinstall with `cargo install --path .`.
+### Changing the default look
+
+Edit [src/mycss.rs](src/mycss.rs) directly and reinstall with `cargo install --path .`.
 To change the color theme of code blocks, replace `"Solarized (light)"` in [src/highlight.rs](src/highlight.rs).

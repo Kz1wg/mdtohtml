@@ -9,7 +9,7 @@ CSS は HTML の中に埋め込むので、生成されたファイル1つをブ
 
 ### ビルド済みの実行ファイルを使う（Rust 不要）
 
-[Releases](https://github.com/KIwGucci/mdtohtml/releases) から、使っている OS 向けの zip をダウンロードして展開します。
+[Releases](https://github.com/Kz1wg/mdtohtml/releases) から、使っている OS 向けの zip をダウンロードして展開します。
 
 | OS | ファイル |
 |---|---|
@@ -56,6 +56,7 @@ HTML は、元の Markdown と同じフォルダに、拡張子を `.html` に�
 | `--table-scale <倍率>` | テーブルが本文幅の何倍まで広がれるか（既定 `1.2`、1.0〜3.0） |
 | `-l`, `--md-links` | Markdown ファイルへのリンクを `.html` へのリンクに書き換える |
 | `-r`, `--recursive` | リンク先の Markdown も辿って一括変換する（`-l` を含む） |
+| `--css <FILE>` | 追加の CSS ファイルを読み込み、色などを上書きする（複数指定可） |
 | `-h`, `--help` | ヘルプを表示する |
 | `-V`, `--version` | バージョンを表示する |
 
@@ -100,8 +101,28 @@ HTML は、元の Markdown と同じフォルダに、拡張子を `.html` に�
 
 ## 見た目のカスタマイズ
 
-色は [src/mycss.rs](src/mycss.rs) の冒頭にある `:root { ... }` の CSS 変数で変えられます。
-主な変数は次のとおりです。
+### `--css` で上書きする（おすすめ）
+
+自分で用意した CSS ファイルを `--css` で指定すると、既定の CSS の後に読み込まれます。
+変えたい色の変数だけを書けば、その部分だけが上書きされます。
+
+```css
+/* company.css：会社の資料用 */
+:root {
+    --color-th-bg:   #00598f;
+    --color-heading: #00395c;
+}
+```
+
+```bash
+mdtohtml --css company.css report.md
+```
+
+- `--css` は複数指定できます。後に指定したものが優先されます
+- `-w` と組み合わせると、CSS ファイルを保存したときにも全ファイルが再変換されます
+- 変数だけでなく、普通の CSS ルール（例：`body { font-family: ...; }`）も書けます
+
+主な変数は次のとおりです。全部の変数は [src/mycss.rs](src/mycss.rs) の冒頭にある `:root { ... }` にあります。
 
 | 変数 | 用途 |
 |---|---|
@@ -112,5 +133,7 @@ HTML は、元の Markdown と同じフォルダに、拡張子を `.html` に�
 | `--color-checkbox` | チェック済みチェックボックスの色 |
 | `--color-target-flash` | リンクで飛んだ先の見出しのハイライト色 |
 
-変更したら、`cargo install --path .` で再インストールしてください。
+### 既定の見た目を変える
+
+[src/mycss.rs](src/mycss.rs) を直接書き換えて、`cargo install --path .` で再インストールします。
 コードブロックの配色テーマは、[src/highlight.rs](src/highlight.rs) の `"Solarized (light)"` を書き換えると変えられます。

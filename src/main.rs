@@ -42,6 +42,10 @@ struct Cli {
     /// リンク先の Markdown も辿って一括変換する（-l を含む）。辿るのは指定ファイルのフォルダ以下のみ
     #[arg(short, long)]
     recursive: bool,
+
+    /// 追加の CSS ファイル。既定の CSS の後に読み込むので、:root の色変数などを上書きできる（複数指定可）
+    #[arg(long, value_name = "FILE")]
+    css: Vec<PathBuf>,
 }
 
 /// 変換時のオプション
@@ -52,6 +56,8 @@ struct ConvertOptions {
     md_links: bool,
     /// --recursive で辿る範囲（最初に指定したファイルのフォルダ）。None なら範囲を問わない
     scope: Option<Vec<PathBuf>>,
+    /// --css で指定した追加 CSS ファイル
+    extra_css: Vec<PathBuf>,
 }
 
 /// --table-scale の値を検証する
@@ -90,7 +96,15 @@ fn main() -> MyResult<()> {
         // リンク先を一括変換するならリンクの書き換えも必須
         md_links: cli.md_links || cli.recursive,
         scope: cli.recursive.then(|| scope_roots(&cli.filename)),
+        extra_css: cli.css,
     };
+
+    for css in &opts.extra_css {
+        if !css.is_file() {
+            eprintln!("CSS ファイルが見つかりません: {}", css.display());
+            std::process::exit(1);
+        }
+    }
 
     let mut conv = Converter::new(&opts, cli.recursive);
     let count = conv.process(&cli.filename);
@@ -220,7 +234,29 @@ impl<'a> Converter<'a> {
             for f in &self.files {
                 last.entry(f.clone()).or_insert_with(|| modified_time(f));
             }
+            for f in &self.opts.extra_css {
+                last.entry(f.clone()).or_insert_with(|| modified_time(f));
+            }
             std::thread::sleep(Duration::from_millis(500));
+
+            // 追加 CSS が変わったら、全ファイルを再変換する
+            let css_changed = self.opts.extra_css.iter().fold(false, |acc, f| {
+                let now = modified_time(f);
+                if now.is_some() && last.get(f) != Some(&now) {
+                    last.insert(f.clone(), now);
+                    true
+                } else {
+                    acc
+                }
+            });
+            if css_changed {
+                for f in &self.files {
+                    last.insert(f.clone(), modified_time(f));
+                }
+                let all = self.files.clone();
+                self.process(&all);
+                continue;
+            }
 
             let changed: Vec<PathBuf> = self
                 .files
@@ -629,7 +665,13 @@ document.addEventListener("DOMContentLoaded", function () {
 </script>"#;
 
 fn convert_md(target: &Path, opts: &ConvertOptions) -> MyResult<Vec<PathBuf>> {
-    let mdcss = mycss::gen_mdcss(&opts.width, opts.table_scale);
+    let mut mdcss = mycss::gen_mdcss(&opts.width, opts.table_scale);
+    for css in &opts.extra_css {
+        let user_css = fs::read_to_string(css)
+            .map_err(|e| format!("CSS ファイルを読めません [{}]: {e}", css.display()))?;
+        mdcss.push_str(&format!("\n/* ---- 追加 CSS: {} ---- */\n", css.display()));
+        mdcss.push_str(&user_css);
+    }
     let markdownstr = fs::read_to_string(target)?;
 
     // 出力先パスを組み立て
