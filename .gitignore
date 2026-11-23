@@ -5,3 +5,4 @@
 *.markdown
 *.md
 *.png
+!README*.md
