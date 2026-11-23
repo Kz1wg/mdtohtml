@@ -6,7 +6,7 @@ authors = ["kazu.I"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-pulldown-cmark = "0.13.4"
+pulldown-cmark = "0.13.6"
 maud = "0.27.0"
-clap = { version = "4.6.1", features = ["derive"] }
+clap = { version = "4.6.9", features = ["derive"] }
 syntect = "5.3.0"
