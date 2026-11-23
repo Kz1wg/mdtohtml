@@ -7,6 +7,24 @@ CSS は HTML の中に埋め込むので、生成されたファイル1つをブ
 
 ## インストール
 
+### ビルド済みの実行ファイルを使う（Rust 不要）
+
+[Releases](https://github.com/KIwGucci/mdtohtml/releases) から、使っている OS 向けの zip をダウンロードして展開します。
+
+| OS | ファイル |
+|---|---|
+| Windows | `mdtohtml-x86_64-pc-windows-msvc.zip` |
+| Mac（Apple Silicon） | `mdtohtml-aarch64-apple-darwin.zip` |
+| Mac（Intel） | `mdtohtml-x86_64-apple-darwin.zip` |
+| Linux | `mdtohtml-x86_64-unknown-linux-gnu.zip` |
+
+展開した `mdtohtml`（Windows では `mdtohtml.exe`）を、PATH の通ったフォルダに置いてください。
+
+- **Windows**：初回の実行時に SmartScreen の警告が出たら、「詳細情報」→「実行」を選びます。
+- **Mac**：署名していないため、ブロックされたら `xattr -d com.apple.quarantine mdtohtml` を実行します。
+
+### ソースからビルドする
+
 ```bash
 cargo install --path .
 ```

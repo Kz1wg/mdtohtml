@@ -168,7 +168,7 @@ impl<'a> Converter<'a> {
         let mut queue: VecDeque<PathBuf> = VecDeque::new();
         let mut queued_now: HashSet<PathBuf> = HashSet::new();
         for s in starts {
-            let key = fs::canonicalize(s).unwrap_or_else(|_| s.clone());
+            let key = canonical(s).unwrap_or_else(|_| s.clone());
             if !queued_now.insert(key.clone()) {
                 continue; // 同じファイルの重複指定
             }
@@ -186,7 +186,7 @@ impl<'a> Converter<'a> {
                 continue;
             }
             for link in links {
-                let Ok(c) = fs::canonicalize(&link) else { continue };
+                let Ok(c) = canonical(&link) else { continue };
                 if self.known.contains(&c) {
                     continue; // 変換済み・登録済み（循環リンクもここで止まる）
                 }
@@ -239,11 +239,24 @@ impl<'a> Converter<'a> {
     }
 }
 
+/// パスを正規化した絶対パスにする。
+/// Windows では先頭に付く "\\?\" を外し、メッセージで見慣れた "C:\..." の形にする
+fn canonical(path: &Path) -> std::io::Result<PathBuf> {
+    let c = fs::canonicalize(path)?;
+    #[cfg(windows)]
+    if let Some(rest) = c.to_str().and_then(|s| s.strip_prefix(r"\\?\")) {
+        if !rest.starts_with("UNC\\") {
+            return Ok(PathBuf::from(rest));
+        }
+    }
+    Ok(c)
+}
+
 /// 最初に指定したファイルのフォルダ（正規化済み）を、辿ってよい範囲として返す
 fn scope_roots(initial: &[PathBuf]) -> Vec<PathBuf> {
     initial
         .iter()
-        .filter_map(|p| fs::canonicalize(p).ok())
+        .filter_map(|p| canonical(p).ok())
         .filter_map(|p| p.parent().map(Path::to_path_buf))
         .collect()
 }
@@ -487,7 +500,7 @@ fn rewrite_md_links(
         }
 
         if let Some(roots) = scope {
-            let inside = fs::canonicalize(&local).is_ok_and(|c| in_scope(&c, roots));
+            let inside = canonical(&local).is_ok_and(|c| in_scope(&c, roots));
             if !inside {
                 if local.with_extension("html").is_file() {
                     eprintln!(

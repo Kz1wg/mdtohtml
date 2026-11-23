@@ -9,6 +9,24 @@ The CSS is embedded in the output, so each generated file can be opened directly
 
 ## Installation
 
+### Prebuilt binaries (no Rust needed)
+
+Download the zip for your OS from [Releases](https://github.com/KIwGucci/mdtohtml/releases) and extract it.
+
+| OS | File |
+|---|---|
+| Windows | `mdtohtml-x86_64-pc-windows-msvc.zip` |
+| macOS (Apple Silicon) | `mdtohtml-aarch64-apple-darwin.zip` |
+| macOS (Intel) | `mdtohtml-x86_64-apple-darwin.zip` |
+| Linux | `mdtohtml-x86_64-unknown-linux-gnu.zip` |
+
+Put the extracted `mdtohtml` (`mdtohtml.exe` on Windows) in a folder on your PATH.
+
+- **Windows**: if SmartScreen shows a warning the first time, choose "More info" → "Run anyway".
+- **macOS**: the binary is not signed. If it is blocked, run `xattr -d com.apple.quarantine mdtohtml`.
+
+### Build from source
+
 ```bash
 cargo install --path .
 ```

@@ -1,0 +1,86 @@
+# タグ（例: v0.2.0）を push すると、各 OS 向けの実行ファイルをビルドして
+# GitHub Releases に添付する。Actions タブから手動実行した場合はビルドのみ（成果物は Artifacts に残る）。
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # リリースの作成に必要
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Test
+        # クロスビルド（Apple Silicon の runner で Intel 向け）ではテストを実行できないので除外
+        if: matrix.target != 'x86_64-apple-darwin'
+        run: cargo test --release --target ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $name = "mdtohtml-${{ matrix.target }}"
+          New-Item -ItemType Directory $name | Out-Null
+          Copy-Item target/${{ matrix.target }}/release/mdtohtml.exe, README.md, README.ja.md, LICENSE $name
+          Compress-Archive -Path $name -DestinationPath "$name.zip"
+
+      - name: Package (macOS / Linux)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          name="mdtohtml-${{ matrix.target }}"
+          mkdir "$name"
+          cp target/${{ matrix.target }}/release/mdtohtml README.md README.ja.md LICENSE "$name"
+          zip -r "$name.zip" "$name"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mdtohtml-${{ matrix.target }}
+          path: mdtohtml-${{ matrix.target }}.zip
+
+  release:
+    name: Publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip
+          generate_release_notes: true
