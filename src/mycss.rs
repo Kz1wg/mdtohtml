@@ -44,6 +44,9 @@ pub fn gen_mdcss(content_width: &str, table_scale: f64) -> String {
     /* タスクリストのチェックボックス */
     --color-checkbox:         #1f9d55;   /* チェック済みの塗り */
     --color-checkbox-border:  #888888;   /* 未チェックの枠線 */
+
+    /* リンクで飛んだ先の見出しを一瞬ハイライトする色 */
+    --color-target-flash:     rgba(52, 152, 219, 0.22);
 }
 
 /* =====================================================================
@@ -77,6 +80,21 @@ h1 {
 
 h2 { font-size: 2em; }
 h3 { font-size: 1.5em; }
+
+/* リンク（#見出し）で飛んだとき、見出しを上端から少し離し、一瞬ハイライトする */
+h1, h2, h3, h4, h5, h6 {
+    scroll-margin-top: 16px;
+}
+
+h1:target, h2:target, h3:target, h4:target, h5:target, h6:target {
+    animation: target-flash 2s ease-out;
+    border-radius: 4px;
+}
+
+@keyframes target-flash {
+    from { background-color: var(--color-target-flash); }
+    to   { background-color: transparent; }
+}
 
 a {
     color: var(--color-link);

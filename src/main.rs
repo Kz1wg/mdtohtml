@@ -50,6 +50,8 @@ struct ConvertOptions {
     width: String,
     table_scale: f64,
     md_links: bool,
+    /// --recursive で辿る範囲（最初に指定したファイルのフォルダ）。None なら範囲を問わない
+    scope: Option<Vec<PathBuf>>,
 }
 
 /// --table-scale の値を検証する
@@ -87,9 +89,10 @@ fn main() -> MyResult<()> {
         table_scale: cli.table_scale,
         // リンク先を一括変換するならリンクの書き換えも必須
         md_links: cli.md_links || cli.recursive,
+        scope: cli.recursive.then(|| scope_roots(&cli.filename)),
     };
 
-    let mut conv = Converter::new(&opts, cli.recursive, &cli.filename);
+    let mut conv = Converter::new(&opts, cli.recursive);
     let count = conv.process(&cli.filename);
     if cli.recursive {
         println!("{count} ファイル変換しました");
@@ -148,16 +151,11 @@ struct Converter<'a> {
 }
 
 impl<'a> Converter<'a> {
-    fn new(opts: &'a ConvertOptions, recursive: bool, initial: &[PathBuf]) -> Self {
-        let roots = initial
-            .iter()
-            .filter_map(|p| fs::canonicalize(p).ok())
-            .filter_map(|p| p.parent().map(Path::to_path_buf))
-            .collect();
+    fn new(opts: &'a ConvertOptions, recursive: bool) -> Self {
         Self {
             opts,
             recursive,
-            roots,
+            roots: opts.scope.clone().unwrap_or_default(),
             known: HashSet::new(),
             files: Vec::new(),
             notified: HashSet::new(),
@@ -192,19 +190,13 @@ impl<'a> Converter<'a> {
                 if self.known.contains(&c) {
                     continue; // 変換済み・登録済み（循環リンクもここで止まる）
                 }
-                if !self.roots.iter().any(|r| c.starts_with(r)) {
-                    if self.notified.insert(c.clone()) {
-                        eprintln!(
-                            "範囲外のため変換しません（リンクは .html に書き換え済み）: {}",
-                            c.display()
-                        );
-                    }
-                    continue;
+                if !in_scope(&c, &self.roots) {
+                    continue; // 範囲外（通知はリンク書き換え時に済んでいる）。安全弁として再確認
                 }
                 if self.known.len() >= MAX_RECURSIVE_FILES {
                     if self.notified.insert(c.clone()) {
                         eprintln!(
-                            "上限 {MAX_RECURSIVE_FILES} ファイルに達したため変換しません: {}",
+                            "上限 {MAX_RECURSIVE_FILES} ファイルに達したため変換しません（このファイルへのリンクは切れます）: {}",
                             c.display()
                         );
                     }
@@ -247,6 +239,20 @@ impl<'a> Converter<'a> {
     }
 }
 
+/// 最初に指定したファイルのフォルダ（正規化済み）を、辿ってよい範囲として返す
+fn scope_roots(initial: &[PathBuf]) -> Vec<PathBuf> {
+    initial
+        .iter()
+        .filter_map(|p| fs::canonicalize(p).ok())
+        .filter_map(|p| p.parent().map(Path::to_path_buf))
+        .collect()
+}
+
+/// 正規化済みのパスが範囲内か
+fn in_scope(canonical: &Path, roots: &[PathBuf]) -> bool {
+    roots.iter().any(|r| canonical.starts_with(r))
+}
+
 fn modified_time(path: &Path) -> Option<SystemTime> {
     fs::metadata(path).and_then(|m| m.modified()).ok()
 }
@@ -262,6 +268,7 @@ fn render_markdown(md: &str, base_dir: &Path, opts: &ConvertOptions) -> (String,
     popts.insert(pulldown_cmark::Options::ENABLE_TASKLISTS);
     popts.insert(pulldown_cmark::Options::ENABLE_MATH);
     popts.insert(pulldown_cmark::Options::ENABLE_GFM);
+    popts.insert(pulldown_cmark::Options::ENABLE_HEADING_ATTRIBUTES); // ## 見出し {#custom-id}
 
     let raw_events: Vec<Event> = pulldown_cmark::Parser::new_ext(md, popts).collect();
     let has_math = raw_events
@@ -273,7 +280,7 @@ fn render_markdown(md: &str, base_dir: &Path, opts: &ConvertOptions) -> (String,
         embed_images(&mut events, base_dir);
     }
     let links = if opts.md_links {
-        rewrite_md_links(&mut events, base_dir)
+        rewrite_md_links(&mut events, base_dir, opts.scope.as_deref())
     } else {
         Vec::new()
     };
@@ -283,9 +290,17 @@ fn render_markdown(md: &str, base_dir: &Path, opts: &ConvertOptions) -> (String,
     (html_out, has_math, links)
 }
 
-/// コードブロックをハイライト済み HTML に置き換え、テーブルをラッパーで囲む
+/// コードブロックをハイライト済み HTML に置き換え、テーブルをラッパーで囲み、見出しに id を付ける
 fn transform_events(events: Vec<Event>) -> Vec<Event> {
     let mut out: Vec<Event> = Vec::with_capacity(events.len());
+    // 手動指定の id を先に登録し、自動生成の id と衝突しないようにする
+    let mut used_ids: HashSet<String> = events
+        .iter()
+        .filter_map(|e| match e {
+            Event::Start(Tag::Heading { id: Some(id), .. }) => Some(id.to_string()),
+            _ => None,
+        })
+        .collect();
     let mut iter = events.into_iter();
 
     while let Some(ev) = iter.next() {
@@ -321,10 +336,55 @@ fn transform_events(events: Vec<Event>) -> Vec<Event> {
                 out.push(Event::End(TagEnd::Table));
                 out.push(Event::Html("</div>".into()));
             }
+            // 見出し: id が無ければ GitHub と同じ規則で自動生成する
+            Event::Start(Tag::Heading { level, id: None, classes, attrs }) => {
+                let mut inner_events = Vec::new();
+                let mut text = String::new();
+                for inner in iter.by_ref() {
+                    if matches!(inner, Event::End(TagEnd::Heading(_))) {
+                        inner_events.push(inner);
+                        break;
+                    }
+                    if let Event::Text(t) | Event::Code(t) = &inner {
+                        text.push_str(t);
+                    }
+                    inner_events.push(inner);
+                }
+                let id = unique_id(&slugify(&text), &mut used_ids);
+                out.push(Event::Start(Tag::Heading { level, id: Some(id.into()), classes, attrs }));
+                out.extend(inner_events);
+            }
             _ => out.push(ev),
         }
     }
     out
+}
+
+/// 見出しテキストを GitHub と同じ規則で id にする
+/// （英字は小文字化、文字・数字・"-"・"_" 以外は削除、空白は "-"）
+fn slugify(text: &str) -> String {
+    let mut slug = String::new();
+    for c in text.trim().chars() {
+        if c.is_alphanumeric() || c == '-' || c == '_' {
+            slug.extend(c.to_lowercase());
+        } else if c.is_whitespace() {
+            slug.push('-');
+        }
+    }
+    slug
+}
+
+/// 文書内で重複しないよう、必要なら "-1", "-2" … を付けて登録する
+fn unique_id(base: &str, used: &mut HashSet<String>) -> String {
+    let base = if base.is_empty() { "section" } else { base };
+    let mut id = base.to_string();
+    let mut n = 1;
+    while used.contains(&id) {
+        id = format!("{base}-{n}");
+        n += 1;
+    }
+    used.insert(id.clone());
+    id
 }
 
 /// 全セルがこの幅（半角換算）以下の列は折り返さない
@@ -403,25 +463,50 @@ fn rewrite_table_cells<'a>(
 
 // ── Markdown リンクの書き換え ────────────────────────────────────────────────
 
-/// Markdown ファイルへのリンクを .html へのリンクに書き換え、存在するリンク先のパスを返す
-fn rewrite_md_links(events: &mut [Event], base_dir: &Path) -> Vec<PathBuf> {
+/// Markdown ファイルへのリンクを .html へのリンクに書き換え、辿ってよいリンク先のパスを返す。
+/// リンク切れを作らないよう、次の場合はリンクを .md のまま残す:
+/// - リンク先の Markdown が存在しない
+/// - scope（--recursive の範囲）外で、対応する .html もまだ無い
+fn rewrite_md_links(
+    events: &mut [Event],
+    base_dir: &Path,
+    scope: Option<&[PathBuf]>,
+) -> Vec<PathBuf> {
     let mut found = Vec::new();
     for ev in events.iter_mut() {
-        if let Event::Start(Tag::Link { dest_url, .. }) = ev {
-            if let Some((new_url, md_path)) = md_link_to_html(dest_url) {
-                let local = base_dir.join(md_path.replace("%20", " "));
-                if !local.is_file() {
+        let Event::Start(Tag::Link { dest_url, .. }) = ev else { continue };
+        let Some((new_url, md_path)) = md_link_to_html(dest_url) else { continue };
+        let local = base_dir.join(md_path.replace("%20", " "));
+
+        if !local.is_file() {
+            eprintln!(
+                "警告: リンク先の Markdown が見つかりません（リンクは .md のまま）: {}",
+                local.display()
+            );
+            continue;
+        }
+
+        if let Some(roots) = scope {
+            let inside = fs::canonicalize(&local).is_ok_and(|c| in_scope(&c, roots));
+            if !inside {
+                if local.with_extension("html").is_file() {
                     eprintln!(
-                        "警告: リンク先の Markdown が見つかりません: {} (リンク: {})",
-                        local.display(),
-                        dest_url
+                        "範囲外のため変換しません（既存の .html にリンク）: {}",
+                        local.display()
                     );
+                    *dest_url = CowStr::from(new_url);
                 } else {
-                    found.push(local);
+                    eprintln!(
+                        "範囲外のため変換しません（リンクは .md のまま）: {}",
+                        local.display()
+                    );
                 }
-                *dest_url = CowStr::from(new_url);
+                continue;
             }
         }
+
+        *dest_url = CowStr::from(new_url);
+        found.push(local);
     }
     found
 }
@@ -603,6 +688,22 @@ mod tests {
         assert_eq!(conv("pic.png"), None);
         assert_eq!(conv("v1.md/index"), None);
         assert_eq!(md_link_to_html("a.md#x").unwrap().1, "a.md");
+    }
+
+    #[test]
+    fn heading_slugs() {
+        assert_eq!(slugify("Getting Started"), "getting-started");
+        assert_eq!(slugify("設定ファイルの書き方"), "設定ファイルの書き方");
+        assert_eq!(slugify("API (v2) の使い方!"), "api-v2-の使い方");
+        assert_eq!(slugify("config.toml の設定"), "configtoml-の設定");
+        assert_eq!(slugify("「注意」事項。"), "注意事項");
+
+        let mut used = HashSet::from(["custom".to_string()]);
+        assert_eq!(unique_id("概要", &mut used), "概要");
+        assert_eq!(unique_id("概要", &mut used), "概要-1");
+        assert_eq!(unique_id("概要", &mut used), "概要-2");
+        assert_eq!(unique_id("custom", &mut used), "custom-1");
+        assert_eq!(unique_id("", &mut used), "section");
     }
 
     #[test]
